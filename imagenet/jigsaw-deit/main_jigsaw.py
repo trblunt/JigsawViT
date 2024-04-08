@@ -70,6 +70,8 @@ def get_args_parser():
                         help='LR scheduler (default: "cosine"')
     parser.add_argument('--lr', type=float, default=5e-4, metavar='LR',
                         help='learning rate (default: 5e-4)')
+    parser.add_argument('--lr-new', type=float, default=5e-3, metavar='LR',
+                        help='learning rate for rotations (default: 5e-3)')
     parser.add_argument('--lr-noise', type=float, nargs='+', default=None, metavar='pct, pct',
                         help='learning rate noise on/off epoch percentages')
     parser.add_argument('--lr-noise-pct', type=float, default=0.67, metavar='PERCENT',
@@ -185,7 +187,8 @@ def get_args_parser():
     # jigsaw
     parser.add_argument("--use-jigsaw", action="store_true")
     parser.set_defaults(use_jigsaw=True)
-    parser.add_argument("--lambda-jigsaw", type=float, default=0.1)
+    parser.add_argument("--lambda-jigsaw", type=float, default=2)
+    parser.add_argument("--lambda-rotations", type=float, default=1)
     parser.add_argument("--mask-ratio", type=float, default=0.5)
 
     return parser
@@ -256,6 +259,7 @@ def main(args):
 
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
+    mixup_active = False
     if mixup_active:
         mixup_fn = Mixup(
             mixup_alpha=args.mixup, cutmix_alpha=args.cutmix, cutmix_minmax=args.cutmix_minmax,
@@ -373,7 +377,29 @@ def main(args):
     if not args.unscale_lr:
         linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
         args.lr = linear_scaled_lr
+        linear_scaled_lr_new = args.lr_new * args.batch_size * utils.get_world_size() / 512.0
+        args.lr_new = linear_scaled_lr_new
+        print('lr:', args.lr, 'lr_new:', args.lr_new)
     optimizer = create_optimizer(args, model_without_ddp)
+
+    # Assuming `optimizer` is your current optimizer and `model` is your model
+    # rotation_params_ids = set(map(id, model.rotations.parameters()))
+
+    # # Go through the existing parameter groups, exclude rotation parameters
+    # for param_group in optimizer.param_groups:
+    #     param_group['params'] = [p for p in param_group['params'] if id(p) not in rotation_params_ids]
+
+    # # Print everything in param_groups[0] except the params
+    # for key, value in optimizer.param_groups[0].items():
+    #     if key != 'params':
+    #         print(key, value)
+
+    # optimizer.add_param_group({'params': model.rotations.parameters(), 'lr_scale': args.lr_new / args.lr, 'weight_decay': 0.1})
+
+    # for key, value in optimizer.param_groups[-1].items():
+    #     if key != 'params':
+    #         print(key, value)
+
     loss_scaler = NativeScaler()
 
     lr_scheduler, _ = create_scheduler(args, optimizer)
@@ -425,7 +451,10 @@ def main(args):
             checkpoint = torch.load(args.resume, map_location='cpu')
         model_without_ddp.load_state_dict(checkpoint['model'])
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            if len(checkpoint['optimizer']['param_groups']) != len(optimizer.param_groups):
+                print("Warning: loaded optimizers don't match, skipping")
+            # else:
+                #optimizer.load_state_dict(checkpoint['optimizer'])
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
             if args.model_ema:
@@ -435,7 +464,7 @@ def main(args):
         lr_scheduler.step(args.start_epoch)
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device)
-        print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+        print(f"Accuracy of the network on the {len(dataset_val)} test puzzles: {test_stats['acc1_jigsaw']:.1f}%")
         return
 
     print(f"Start training for {args.epochs} epochs")
@@ -469,10 +498,10 @@ def main(args):
              
 
         test_stats = evaluate(data_loader_val, model, device)
-        print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+        print(f"Accuracy of the network on the {len(dataset_val)} test puzzles: {test_stats['acc1_jigsaw']:.1f}%")
         
-        if max_accuracy < test_stats["acc1"]:
-            max_accuracy = test_stats["acc1"]
+        if max_accuracy < test_stats["acc1_jigsaw"]:
+            max_accuracy = test_stats["acc1_jigsaw"]
             if args.output_dir:
                 checkpoint_paths = [output_dir / 'best_checkpoint.pth']
                 for checkpoint_path in checkpoint_paths:

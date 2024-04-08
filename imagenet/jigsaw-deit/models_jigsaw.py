@@ -26,7 +26,18 @@ class JigsawVisionTransformer(VisionTransformer):
                                               torch.nn.Linear(self.embed_dim, self.embed_dim),
                                               torch.nn.ReLU(),
                                               torch.nn.Linear(self.embed_dim, self.num_patches)])
-            self.target = torch.arange(self.num_patches)
+            self.rotations = torch.nn.Sequential(*[torch.nn.Linear(self.embed_dim, self.embed_dim),
+                                                 torch.nn.ReLU(),
+                                                 torch.nn.Linear(self.embed_dim, self.embed_dim),
+                                                 torch.nn.ReLU(),
+                                                 torch.nn.Linear(self.embed_dim, 4)])
+            
+            for m in self.rotations.modules():
+                if isinstance(m, torch.nn.Linear):
+                    torch.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                    if m.bias is not None:
+                        torch.nn.init.constant_(m.bias, 0)
+            # self.target = torch.arange(self.num_patches)
 
     def random_masking(self, x, mask_ratio):
         """
@@ -46,14 +57,14 @@ class JigsawVisionTransformer(VisionTransformer):
         
         # keep the first subset
         ids_keep = ids_shuffle[:, :len_keep] # N, len_keep
+        ids_masked = ids_shuffle[:, len_keep:]  # N, len_masked
         x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
-        target_masked = ids_keep
         
-        return x_masked, target_masked
+        return x_masked, ids_keep, ids_masked
 
-    def forward_jigsaw(self, x):
+    def forward_jigsaw(self, x, eval=False):
         # masking: length -> length * mask_ratio
-        x, target = self.random_masking(x, self.mask_ratio)
+        x, keep, masked = self.random_masking(x, 0.0 if eval else self.mask_ratio)
 
         # append cls token
         cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
@@ -62,8 +73,9 @@ class JigsawVisionTransformer(VisionTransformer):
         # apply Transformer blocks
         x = self.blocks(x)
         x = self.norm(x)
-        x = self.jigsaw(x[:, 1:])
-        return x.reshape(-1, self.num_patches), target.reshape(-1)
+        x_jigsaw = self.jigsaw(x[:, 1:])
+        x_rot = self.rotations(x[:, 1:])
+        return x_jigsaw, x_rot, keep, masked
 
     def forward_cls(self, x): 
         # add pos embed w/o cls token
@@ -79,14 +91,34 @@ class JigsawVisionTransformer(VisionTransformer):
         x = self.head(x[:, 0])
         return x
 
-    def forward(self, x):
+    def forward(self, x, x_shuffled, eval=False):
         x = self.patch_embed(x)
         pred_cls = self.forward_cls(x)
-        outs = Munch(sup=pred_cls)
+        outs = Munch(pred_cls=pred_cls)
         if self.use_jigsaw:
-            pred_jigsaw, targets_jigsaw = self.forward_jigsaw(x)
-            outs.pred_jigsaw = pred_jigsaw
-            outs.gt_jigsaw = targets_jigsaw
+            x_shuffled = self.patch_embed(x_shuffled)
+            pred_jigsaw, pred_rot, ids_used, ids_masked = self.forward_jigsaw(x_shuffled, eval=eval)
+
+            # print("pred_jigsaw", pred_jigsaw.shape)
+            # print("pred_rot", pred_rot.shape)
+
+            jigsaw_out = torch.full((x.shape[0], self.num_patches, self.num_patches), -1.0, device=x.device, dtype=pred_jigsaw.dtype)
+            rot_out = torch.full((x.shape[0], self.num_patches, 4), -1.0, device=x.device, dtype=pred_rot.dtype)
+
+            # print("jigsaw_out", jigsaw_out.shape)
+            # print("rot_out", rot_out.shape)
+            # print("ids_used", ids_used.shape)
+
+
+            # Use scatter_ to fill in the jigsaw_out and rot_out tensors
+            jigsaw_out.scatter_(1, ids_used.unsqueeze(2).expand(-1, -1, self.num_patches), pred_jigsaw)
+            rot_out.scatter_(1, ids_used.unsqueeze(2).expand(-1, -1, 4), pred_rot)
+
+            outs.pred_jigsaw=jigsaw_out
+            outs.pred_rot=rot_out
+            outs.ids_masked=ids_masked
+            outs.ids_used=ids_used
+
         return outs
 
 
@@ -102,7 +134,7 @@ def jigsaw_tiny_patch16_224(mask_ratio=0.5, use_jigsaw=True, pretrained=False, *
             url="https://dl.fbaipublicfiles.com/deit/deit_tiny_patch16_224-a1311bcf.pth",
             map_location="cpu", check_hash=True
         )
-        model.load_state_dict(checkpoint["model"])
+        model.load_state_dict(checkpoint["model"], strict=False)
     return model
 
 
@@ -118,7 +150,7 @@ def jigsaw_small_patch16_224(mask_ratio=0.5, use_jigsaw=True, pretrained=False, 
             url="https://dl.fbaipublicfiles.com/deit/deit_small_patch16_224-cd65a155.pth",
             map_location="cpu", check_hash=True
         )
-        model.load_state_dict(checkpoint["model"])
+        model.load_state_dict(checkpoint["model"], strict=False)
     return model
 
 @register_model

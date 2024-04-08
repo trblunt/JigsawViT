@@ -1,0 +1,3 @@
+logs/
+# cached python
+*.pyc
