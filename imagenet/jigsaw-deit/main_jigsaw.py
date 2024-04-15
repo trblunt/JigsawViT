@@ -31,7 +31,8 @@ import utils
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
-    parser.add_argument('--batch-size', default=64, type=int)
+    # parser.add_argument('--batch-size', default=64, type=int)
+    parser.add_argument('--batch-size', default=64, type=int, help='Input batch size for training (default: 64)')
     parser.add_argument('--epochs', default=300, type=int)
     parser.add_argument('--bce-loss', action='store_true')
     parser.add_argument('--unscale-lr', action='store_true')
@@ -82,7 +83,7 @@ def get_args_parser():
                         help='warmup learning rate (default: 1e-6)')
     parser.add_argument('--min-lr', type=float, default=1e-5, metavar='LR',
                         help='lower lr bound for cyclic schedulers that hit 0 (1e-5)')
-
+    parser.add_argument('--adjust-lr', action='store_true', help='Enable dynamic learning rate adjustments')
     parser.add_argument('--decay-epochs', type=float, default=30, metavar='N',
                         help='epoch interval to decay LR')
     parser.add_argument('--warmup-epochs', type=int, default=5, metavar='N',
@@ -380,7 +381,10 @@ def main(args):
         linear_scaled_lr_new = args.lr_new * args.batch_size * utils.get_world_size() / 512.0
         args.lr_new = linear_scaled_lr_new
         print('lr:', args.lr, 'lr_new:', args.lr_new)
-    optimizer = create_optimizer(args, model_without_ddp)
+    # optimizer = create_optimizer(args, model_without_ddp)
+    # Direct creation with weight decay
+    optimizer = torch.optim.Adam(model_without_ddp.parameters(), lr=0.001, weight_decay=1e-5)
+
 
     # Assuming `optimizer` is your current optimizer and `model` is your model
     # rotation_params_ids = set(map(id, model.rotations.parameters()))

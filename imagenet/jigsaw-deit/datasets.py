@@ -8,9 +8,7 @@ from torchvision.datasets.folder import ImageFolder, default_loader
 
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import create_transform
-from torch.utils.data import WeightedRandomSampler
-import torch
-from torch.utils.data import DataLoader
+
 from shuffle import ShuffleAndRotatePatches
 
 
@@ -57,36 +55,26 @@ class INatDataset(ImageFolder):
     # __getitem__ and __len__ inherited from ImageFolder
 
 
-
 def build_dataset(is_train, args):
-    # Ensure the transform function is defined and valid
     transform = build_transform(is_train, args)
-    root = os.path.join(args.data_path, 'train' if is_train else 'val')
 
-    # Check if the specified directory exists
-    if not os.path.isdir(root):
-        raise ValueError(f"The specified directory does not exist: {root}")
+    if args.data_set == 'CIFAR':
+        dataset = datasets.CIFAR100(args.data_path, train=is_train, transform=transform)
+        nb_classes = 100
+    elif args.data_set == 'IMNET':
+        root = os.path.join(args.data_path, 'train' if is_train else 'val')
+        dataset = datasets.ImageFolder(root, transform=transform)
+        nb_classes = 1000
+    elif args.data_set == 'INAT':
+        dataset = INatDataset(args.data_path, train=is_train, year=2018,
+                              category=args.inat_category, transform=transform)
+        nb_classes = dataset.nb_classes
+    elif args.data_set == 'INAT19':
+        dataset = INatDataset(args.data_path, train=is_train, year=2019,
+                              category=args.inat_category, transform=transform)
+        nb_classes = dataset.nb_classes
 
-    dataset = datasets.ImageFolder(root, transform=transform)
-
-    # Dynamically count the number of classes based on the folders in the directory
-    nb_classes = len(dataset.classes)
-
-    # Compute weights for handling class imbalance
-    targets = torch.tensor([s[1] for s in dataset.samples])
-    class_counts = torch.bincount(targets, minlength=nb_classes)
-
-    # Avoid division by zero by setting a minimum class count of 1
-    class_weights = 1. / torch.where(class_counts > 0, class_counts.float(), torch.ones_like(class_counts).float())
-    sample_weights = class_weights[targets]
-
-    # Use a weighted random sampler to ensure balanced sampling
-    sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
-
-    # Set up the DataLoader
-    data_loader = DataLoader(dataset, batch_size=args.batch_size, sampler=sampler, num_workers=args.num_workers, pin_memory=args.pin_mem, drop_last=True)
-
-    return data_loader, nb_classes
+    return dataset, nb_classes
 
 
 def build_transform(is_train, args):

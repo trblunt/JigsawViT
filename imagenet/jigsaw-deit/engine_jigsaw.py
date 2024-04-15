@@ -41,128 +41,45 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     model.train(set_training_mode)
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    metric_logger.add_meter('lr_new', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     metric_logger.add_meter('loss', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
     metric_logger.add_meter('loss_cls', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
     metric_logger.add_meter('loss_jigsaw', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
     metric_logger.add_meter('loss_rotations', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
-    header = 'Epoch: [{}]'.format(epoch)
-    print_freq = 10
 
     accumulated_loss = torch.tensor(0.0, device=device)
-    accumulated_loss_cls = torch.tensor(0.0, device=device)
-    accumulated_loss_jigsaw = torch.tensor(0.0, device=device)
-    accumulated_loss_rotations = torch.tensor(0.0, device=device)
     num_batches = 0
 
-    torch.cuda.set_sync_debug_mode(1)
-
-    # profiler = profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-    #                    schedule=torch.profiler.schedule(wait=1, warmup=1, active=3),
-    #                    # on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/profiler'),
-    #                    record_shapes=True,
-    #                    with_stack=False)
-
     try:
-        for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
-            images, shuffled_images, target_positions, target_rotations = samples
-
-            images = images.to(device, non_blocking=True)
-            shuffled_images = shuffled_images.to(device, non_blocking=True)
-            target_positions = target_positions.to(device, non_blocking=True)
-            target_rotations = target_rotations.to(device, non_blocking=True)
-            targets = targets.to(device, non_blocking=True)
-
-            with torch.cuda.amp.autocast():
-                with record_function("model_inference"):
-                    outputs = model(images, shuffled_images)
-                
-                with record_function("loss_calculation"):
-                    loss = criterion(images, outputs.pred_cls, targets)
-                    accumulated_loss_cls += loss
-                    if args.use_jigsaw:
-                        target_positions = update_targets_based_on_indices(target_positions, outputs.ids_used)
-                        target_rotations = update_targets_based_on_indices(target_rotations, outputs.ids_used)
-                        loss_jigsaw = F.cross_entropy(outputs.pred_jigsaw.view(-1, outputs.pred_jigsaw.size(-1)), target_positions.view(-1), ignore_index=-1)
-                        loss += loss_jigsaw * args.lambda_jigsaw
-                        loss_rotations = F.cross_entropy(outputs.pred_rot.view(-1, outputs.pred_rot.size(-1)), target_rotations.view(-1), ignore_index=-1)
-                        loss += loss_rotations * args.lambda_rotations
-                        # writer.add_scalar('Loss/total', loss.item(), epoch * len(data_loader) + num_batches)
-                        # writer.add_scalar('Loss/jigsaw', loss_jigsaw.item(), epoch * len(data_loader) + num_batches)
-                        # writer.add_scalar('Loss/rotation', loss_rotations.item(), epoch * len(data_loader) + num_batches)
-
-                        # For debugging, print the first 16 target_rotations and pred_rot
-                        # print("target_rotations", target_rotations[:16])
-                        # print("pred_rot", outputs.pred_rot[:16])
-
-                    accumulated_loss += loss
-                    accumulated_loss_jigsaw += loss_jigsaw
-                    accumulated_loss_rotations += loss_rotations
-                    num_batches += 1
-                
-            with record_function("loss_sync"):
-                if num_batches % print_freq == 0:
-                    # Calculate average losses
-                    avg_loss = accumulated_loss / print_freq
-                    avg_loss_cls = accumulated_loss_cls / print_freq
-                    avg_loss_jigsaw = accumulated_loss_jigsaw / print_freq
-                    avg_loss_rotations = accumulated_loss_rotations / print_freq
-
-                    # Update metric logger (converts to CPU scalar here, implicitly calls .item())
-                    metric_logger.meters['loss'].update(avg_loss.item(), n=print_freq)
-                    metric_logger.meters['loss_cls'].update(avg_loss_cls.item(), n=print_freq)
-                    metric_logger.meters['loss_jigsaw'].update(avg_loss_jigsaw.item(), n=print_freq)
-                    metric_logger.meters['loss_rotations'].update(avg_loss_rotations.item(), n=print_freq)
-
-                    # Reset accumulators
-                    accumulated_loss.zero_()
-                    accumulated_loss_cls.zero_()
-                    accumulated_loss_jigsaw.zero_()
-                    accumulated_loss_rotations.zero_()
-
-                    # for idx, group in enumerate(optimizer.param_groups):
-                    #     print("Learning rate for group {} is {}".format(idx, group['lr']))
-                    #     if 'lr_scale' in group:
-                    #         print("Learning rate scale for group {} is {}".format(idx, group['lr_scale']))
-
-                    if not math.isfinite(avg_loss.item()):
-                        print("Loss is {}, stopping training".format(avg_loss.item()))
-                        sys.exit(1)
-
+        for samples in metric_logger.log_every(data_loader, 10, f'Epoch: [{epoch}]'):
+            # Unpack data based on your data structure
+            images = samples['images'].to(device)
+            targets = samples['targets'].to(device)
             optimizer.zero_grad()
 
-            # this attribute is added by timm on one optimizer (adahessian)
-            is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
-            loss_scaler(loss, optimizer, clip_grad=max_norm,
-                    parameters=model.parameters(), create_graph=is_second_order)
-            
-            # for name, parameter in model.named_parameters():
-            #     if parameter.grad is not None:
-            #         writer.add_histogram(f"Gradients/{name}", parameter.grad, epoch * len(data_loader) + num_batches)
+            with torch.cuda.amp.autocast():
+                outputs = model(images)
+                loss = criterion(outputs, targets)  # Assume DistillationLoss is now correctly handled
 
-            torch.cuda.synchronize()
+            loss.backward()
+            optimizer.step()
+
             if model_ema is not None:
                 model_ema.update(model)
 
-            metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-            metric_logger.update(lr_new=optimizer.param_groups[-1]["lr"])
+            metric_logger.update(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
+            accumulated_loss += loss.detach()
+            num_batches += 1
 
-            # # At the end of each batch iteration, log learning rates
-            # for i, param_group in enumerate(optimizer.param_groups):
-            #     writer.add_scalar(f'Learning_Rate/group_{i}', param_group['lr'], epoch * len(data_loader) + num_batches)
-
-            #profiler.step()
     except KeyboardInterrupt:
-        print("Caught KeyboardInterrupt, saving profiler data...")
-        # writer.close()
-        #profiler.step()
+        print("Training interrupted")
         sys.exit(1)
-    # except Exception as e:
-    #     print("Caught exception: {}".format(e))
-    # finally:
-    #     metric_logger.synchronize_between_processes()
-    #     print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+
+    avg_loss = accumulated_loss / num_batches if num_batches > 0 else 0
+    print(f"Epoch completed: Avg Loss: {avg_loss:.4f}")
+
+    return {'loss': avg_loss.item(), 'lr': optimizer.param_groups[0]["lr"]}
+
+
 
 
 @torch.no_grad()
