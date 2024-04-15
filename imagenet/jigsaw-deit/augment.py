@@ -23,7 +23,7 @@ import torchvision.transforms.functional as TF
 
 class GaussianBlur(object):
     """
-    Apply Gaussian Blur to the PIL image.
+    Apply Gaussian Blur to the PIL image. check
     """
     def __init__(self, p=0.1, radius_min=0.1, radius_max=2.):
         self.prob = p
