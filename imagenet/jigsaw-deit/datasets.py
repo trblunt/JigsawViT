@@ -8,7 +8,9 @@ from torchvision.datasets.folder import ImageFolder, default_loader
 
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import create_transform
-
+from torch.utils.data import WeightedRandomSampler
+import torch
+from torch.utils.data import DataLoader
 from shuffle import ShuffleAndRotatePatches
 
 
@@ -55,26 +57,23 @@ class INatDataset(ImageFolder):
     # __getitem__ and __len__ inherited from ImageFolder
 
 
+
 def build_dataset(is_train, args):
     transform = build_transform(is_train, args)
+    root = os.path.join(args.data_path, 'train' if is_train else 'val')
+    dataset = datasets.ImageFolder(root, transform=transform)
+    nb_classes = 1000  # ImageNet has 1000 classes
 
-    if args.data_set == 'CIFAR':
-        dataset = datasets.CIFAR100(args.data_path, train=is_train, transform=transform)
-        nb_classes = 100
-    elif args.data_set == 'IMNET':
-        root = os.path.join(args.data_path, 'train' if is_train else 'val')
-        dataset = datasets.ImageFolder(root, transform=transform)
-        nb_classes = 1000
-    elif args.data_set == 'INAT':
-        dataset = INatDataset(args.data_path, train=is_train, year=2018,
-                              category=args.inat_category, transform=transform)
-        nb_classes = dataset.nb_classes
-    elif args.data_set == 'INAT19':
-        dataset = INatDataset(args.data_path, train=is_train, year=2019,
-                              category=args.inat_category, transform=transform)
-        nb_classes = dataset.nb_classes
+    # Compute weights
+    targets = [s[1] for s in dataset.samples]
+    class_counts = torch.bincount(torch.tensor(targets))
+    class_weights = 1. / class_counts.float()
+    sample_weights = class_weights[torch.tensor(targets)]
+    sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
 
-    return dataset, nb_classes
+    # DataLoader setup
+    data_loader = DataLoader(dataset, batch_size=args.batch_size, sampler=sampler)
+    return data_loader, nb_classes
 
 
 def build_transform(is_train, args):
