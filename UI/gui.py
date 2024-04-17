@@ -54,10 +54,32 @@ def drop(event):
             break
 
 def select_folder():
-    """Handle selection of a directory."""
-    folder_path = filedialog.askdirectory()
+    """Let user select a directory, then process and save shuffled images to a 'shuffled_images' subdirectory."""
+    folder_path = filedialog.askdirectory()  # User selects the folder
     if folder_path:
-        process_images(folder_path)
+        shuffled_path = os.path.join(folder_path, "shuffled_images")
+        if not os.path.exists(shuffled_path):
+            os.makedirs(shuffled_path)  # Create the subdirectory if it doesn't exist
+        try:
+            for file_name in os.listdir(folder_path):
+                if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+                    full_path = os.path.join(folder_path, file_name)
+                    img = Image.open(full_path)
+                    img = img.resize((IMAGE_RESIZE_VAL, IMAGE_RESIZE_VAL))
+
+                    # Shuffle the image
+                    performShuffle(img)
+
+                    # Construct the save path for the shuffled image
+                    save_path = os.path.join(shuffled_path, f"shuffled_{file_name}")
+                    
+                    # Save the shuffled image
+                    saveShuffledImage(save_path)
+
+            messagebox.showinfo("Process Complete", "All images processed and saved in 'shuffled_images' folder.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to process images: {str(e)}")
+
 
 def process_images(folder_path):
     """Process all images in the directory."""
@@ -127,6 +149,21 @@ def saveShuffledImage():
     else:
         messagebox.showerror("Save Error", "No shuffled image to save.")
 
+def saveShuffledImage(imagePath):
+    """Saves the shuffled image to a file."""
+    if hasattr(shuffled_image_label, 'shuffled_image'):
+        # Opens a file dialog asking the user where to save the image
+        # file_path = filedialog.asksaveasfilename(defaultextension=".jpg",
+        #                                             filetypes=[("JPEG files", "*.jpg"), ("All files", "*.*")])
+        if imagePath:
+            # Save the shuffled image at the chosen path
+            shuffled_image_label.shuffled_image.save(imagePath)
+            
+        else:
+            messagebox.showinfo("Save Image", "Save operation cancelled.")
+    else:
+        messagebox.showerror("Save Error", "No shuffled image to save.")
+
 def clear_images():
     """Clears all images and resets the GUI to its initial state."""
     image_label.config(image='', text="Drag and drop an image here")
@@ -184,7 +221,7 @@ entry_note_label.pack(pady=(20, 0))  # Add some padding above the label
 
 
 # Button to select a folder
-folder_button = tk.Button(root, text="Select Image Folder (not wired to work yet!!!)", command=select_folder, bg=button_color, fg=text_color)
+folder_button = tk.Button(root, text="Select Image Folder", command=select_folder, bg=button_color, fg=text_color)
 folder_button.pack(pady=10, padx=10, fill=tk.X)
 
 # Status label
