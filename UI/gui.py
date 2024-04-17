@@ -134,7 +134,7 @@ def performShuffle(theImage):
 
     showShuffledImage(theImage, rotated_pieces)
 
-def saveShuffledImage():
+def saveShuffledSingleImage():
     """Saves the shuffled image to a file."""
     if hasattr(shuffled_image_label, 'shuffled_image'):
         # Opens a file dialog asking the user where to save the image
@@ -199,7 +199,7 @@ shuffled_image_label = Label(root, text="Shuffled and rotated puzzle pieces will
 shuffled_image_label.pack(expand=True, fill=tk.BOTH)
 
 # Button to save the shuffled image
-save_image_button = tk.Button(root, text="Save Shuffled Image", command=saveShuffledImage, bg=button_color, fg=text_color)
+save_image_button = tk.Button(root, text="Save Shuffled Image", command=saveShuffledSingleImage, bg=button_color, fg=text_color)
 save_image_button.pack(pady=10, padx=10, fill=tk.X)
 
 # Add Clear Button to the GUI
