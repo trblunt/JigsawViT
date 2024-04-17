@@ -137,7 +137,7 @@ def clear_images():
 
 
 # Call the function to print package versions
-config.print_package_versions()
+# config.print_package_versions()
 
 # Create a drag-and-drop enabled Tkinter window
 root = TkinterDnD.Tk()
@@ -145,10 +145,13 @@ root.title("Image Loader and Folder Processor")
 root.geometry('1000x800') # Increased size to accommodate new elements
 root.minsize(600, 600)
 
-# Styling
-bg_color = "#f0f0f0"
-button_color = "#d9d9d9"
-text_color = "#333"
+# Dark mode styling
+bg_color = "#333333"  # Dark gray
+button_color = "#555555"  # Lighter gray
+text_color = "#FFFFFF"  # White
+
+# Applying the dark theme to GUI components
+root.configure(bg=bg_color)
 
 # Label to display the dropped image
 image_label = Label(root, text="Drag and drop an image here", relief="solid", bd=1, fg=text_color, bg=bg_color)
@@ -159,28 +162,29 @@ shuffled_image_label = Label(root, text="Shuffled and rotated puzzle pieces will
 shuffled_image_label.pack(expand=True, fill=tk.BOTH)
 
 # Button to save the shuffled image
-save_image_button = tk.Button(root, text="Save Shuffled Image", command=saveShuffledImage, bg=button_color)
+save_image_button = tk.Button(root, text="Save Shuffled Image", command=saveShuffledImage, bg=button_color, fg=text_color)
 save_image_button.pack(pady=10, padx=10, fill=tk.X)
 
 # Add Clear Button to the GUI
-clear_button = tk.Button(root, text="Clear Images", command=clear_images, bg=button_color)
+clear_button = tk.Button(root, text="Clear Images", command=clear_images, bg=button_color, fg=text_color)
 clear_button.pack(pady=10, padx=10, fill=tk.X)
 
-# Label for puzzle side length entry
-puzzle_side_length_label = tk.Label(root, text="Enter Puzzle Dimension Length:")
+# Applying dark mode colors to the puzzle side length label and entry
+puzzle_side_length_label = tk.Label(root, text="Enter Puzzle Dimension Length:", bg=bg_color, fg=text_color)
 puzzle_side_length_label.pack(pady=(20, 0))  # Add some padding above the label
-# Entry for puzzle side length
+
 puzzle_side_length_var = StringVar(value="14")
-puzzle_side_length_entry = Entry(root, textvariable=puzzle_side_length_var)
+puzzle_side_length_entry = Entry(root, textvariable=puzzle_side_length_var, bg=button_color, fg=text_color, insertbackground=text_color)  # Ensure cursor is visible
 puzzle_side_length_entry.pack(pady=5)
 puzzle_side_length_entry.bind("<Return>", lambda event: update_puzzle_side_length())
 
-# Label for entry
-puzzle_side_length_label = tk.Label(root, text="*Press Enter/Return to save value changes*")
-puzzle_side_length_label.pack(pady=(20, 0))  # Add some padding above the label
+# Label for entry note
+entry_note_label = tk.Label(root, text="*Press Enter/Return to save value changes*", bg=bg_color, fg=text_color)
+entry_note_label.pack(pady=(20, 0))  # Add some padding above the label
+
 
 # Button to select a folder
-folder_button = tk.Button(root, text="Select Image Folder (not wired to work yet!!!)", command=select_folder, bg=button_color)
+folder_button = tk.Button(root, text="Select Image Folder (not wired to work yet!!!)", command=select_folder, bg=button_color, fg=text_color)
 folder_button.pack(pady=10, padx=10, fill=tk.X)
 
 # Status label
@@ -208,6 +212,60 @@ def resize_images():
         shuffled_image_label.image = photo_shuffled  # Keep a reference!
 
 # root.bind('<Configure>', lambda e: resize_images()) # bug here, will fix later. 
+
+
+# Color schemes for dark and light modes
+themes = {
+    "dark": {
+        "bg_color": "#333333",
+        "text_color": "#FFFFFF",
+        "button_color": "#555555",
+        "entry_bg": "#555555",
+        "entry_fg": "#FFFFFF",
+        "insert_bg": "#FFFFFF"
+    },
+    "light": {
+        "bg_color": "#FFFFFF",
+        "text_color": "#000000",
+        "button_color": "#CCCCCC",
+        "entry_bg": "#FFFFFF",
+        "entry_fg": "#000000",
+        "insert_bg": "#000000"
+    }
+}
+
+current_theme = "light"  # Start with light mode
+
+def apply_theme(theme):
+    global current_theme
+    current_theme = theme
+    theme_colors = themes[theme]
+    
+    # Apply theme colors to all components
+    root.configure(bg=theme_colors['bg_color'])
+    
+    image_label.config(bg=theme_colors['bg_color'], fg=theme_colors['text_color'])
+    shuffled_image_label.config(bg=theme_colors['bg_color'], fg=theme_colors['text_color'])
+    save_image_button.config(bg=theme_colors['button_color'], fg=theme_colors['text_color'])
+    folder_button.config(bg=theme_colors['button_color'], fg=theme_colors['text_color'])
+    clear_button.config(bg=theme_colors['button_color'], fg=theme_colors['text_color'])
+    puzzle_side_length_label.config(bg=theme_colors['bg_color'], fg=theme_colors['text_color'])
+    puzzle_side_length_entry.config(bg=theme_colors['entry_bg'], fg=theme_colors['entry_fg'], insertbackground=theme_colors['insert_bg'])
+    entry_note_label.config(bg=theme_colors['bg_color'], fg=theme_colors['text_color'])
+    status_label.config(bg=theme_colors['bg_color'], fg=theme_colors['text_color'])
+
+def toggle_theme():
+    if current_theme == "light":
+        apply_theme("dark")
+    else:
+        apply_theme("light")
+
+apply_theme(current_theme)
+
+
+# Button to toggle theme
+theme_toggle_button = tk.Button(root, text="Toggle Light/Dark Mode", command=toggle_theme, bg="#CCCCCC")
+theme_toggle_button.pack(pady=10, padx=10, fill=tk.X)
 
 
 # Enable dropping files into the window
