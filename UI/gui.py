@@ -11,6 +11,7 @@ import generateImageConfigs as config
 # Variables to hold piece size and puzzle side length
 pieceSize = (16, 16)  # default piece size as a tuple
 puzzleSideLength = 14  # default puzzle side length
+IMAGE_RESIZE_VAL = 224
 
 def update_puzzle_side_length():
     """Update puzzle side length from the entry box."""
@@ -18,7 +19,7 @@ def update_puzzle_side_length():
     global pieceSize
     try:
         puzzleSideLength = int(puzzle_side_length_var.get())
-        pieceSizeDims = math.ceil(224/puzzleSideLength)
+        pieceSizeDims = math.ceil(IMAGE_RESIZE_VAL/puzzleSideLength)
         pieceSize = (pieceSizeDims, pieceSizeDims)
         status_label.config(text="Puzzle side length updated.")
     except:
@@ -29,8 +30,8 @@ def load_image(path):
     try:
         image = Image.open(path)
         if image.width != image.height:
-            messagebox.showinfo("Image Resize", "The image is not square. It will be resized to 224x224 pixels.")
-        image = image.resize((224, 224))
+            messagebox.showinfo("Image Resize", f"The image is not square. It will be resized to {IMAGE_RESIZE_VAL}x{IMAGE_RESIZE_VAL} pixels.")
+        image = image.resize((IMAGE_RESIZE_VAL, IMAGE_RESIZE_VAL))
 
         tk_image = ImageTk.PhotoImage(image)
         image_label.config(image=tk_image)
@@ -111,13 +112,37 @@ def performShuffle(theImage):
 
     showShuffledImage(theImage, rotated_pieces)
 
+def saveShuffledImage():
+    """Saves the shuffled image to a file."""
+    if hasattr(shuffled_image_label, 'shuffled_image'):
+        # Opens a file dialog asking the user where to save the image
+        file_path = filedialog.asksaveasfilename(defaultextension=".jpg",
+                                                    filetypes=[("JPEG files", "*.jpg"), ("All files", "*.*")])
+        if file_path:
+            # Save the shuffled image at the chosen path
+            shuffled_image_label.shuffled_image.save(file_path)
+            messagebox.showinfo("Save Image", "Shuffled image saved successfully!")
+        else:
+            messagebox.showinfo("Save Image", "Save operation cancelled.")
+    else:
+        messagebox.showerror("Save Error", "No shuffled image to save.")
+
+def clear_images():
+    """Clears all images and resets the GUI to its initial state."""
+    image_label.config(image='', text="Drag and drop an image here")
+    image_label.image = None
+    shuffled_image_label.config(image='', text="Shuffled and rotated puzzle pieces will appear here")
+    shuffled_image_label.image = None
+    status_label.config(text="No image loaded")
+
+
 # Call the function to print package versions
 config.print_package_versions()
 
 # Create a drag-and-drop enabled Tkinter window
 root = TkinterDnD.Tk()
 root.title("Image Loader and Folder Processor")
-root.geometry('1280x720') # Increased size to accommodate new elements
+root.geometry('1000x800') # Increased size to accommodate new elements
 root.minsize(600, 600)
 
 # Styling
@@ -133,8 +158,16 @@ image_label.pack(expand=True, fill=tk.BOTH)
 shuffled_image_label = Label(root, text="Shuffled and rotated puzzle pieces will appear here", relief="solid", bd=1, fg=text_color, bg=bg_color)
 shuffled_image_label.pack(expand=True, fill=tk.BOTH)
 
+# Button to save the shuffled image
+save_image_button = tk.Button(root, text="Save Shuffled Image", command=saveShuffledImage, bg=button_color)
+save_image_button.pack(pady=10, padx=10, fill=tk.X)
+
+# Add Clear Button to the GUI
+clear_button = tk.Button(root, text="Clear Images", command=clear_images, bg=button_color)
+clear_button.pack(pady=10, padx=10, fill=tk.X)
+
 # Label for puzzle side length entry
-puzzle_side_length_label = tk.Label(root, text="Enter Puzzle Side Length:")
+puzzle_side_length_label = tk.Label(root, text="Enter Puzzle Dimension Length:")
 puzzle_side_length_label.pack(pady=(20, 0))  # Add some padding above the label
 # Entry for puzzle side length
 puzzle_side_length_var = StringVar(value="14")
