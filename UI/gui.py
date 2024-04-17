@@ -1,3 +1,4 @@
+import math
 import os
 import tkinter as tk
 from tkinter import filedialog, Label, Toplevel, messagebox, Entry, StringVar
@@ -11,21 +12,14 @@ import generateImageConfigs as config
 pieceSize = (16, 16)  # default piece size as a tuple
 puzzleSideLength = 14  # default puzzle side length
 
-def update_piece_size():
-    """Update piece size from the entry box."""
-    global pieceSize
-    try:
-        a, b = map(int, piece_size_var.get().split('x'))
-        pieceSize = (a, b)
-        status_label.config(text="Piece size updated.")
-    except:
-        status_label.config(text="Invalid piece size format. Use 'AxB'.")
-
 def update_puzzle_side_length():
     """Update puzzle side length from the entry box."""
     global puzzleSideLength
+    global pieceSize
     try:
         puzzleSideLength = int(puzzle_side_length_var.get())
+        pieceSizeDims = math.ceil(224/puzzleSideLength)
+        pieceSize = (pieceSizeDims, pieceSizeDims)
         status_label.config(text="Puzzle side length updated.")
     except:
         status_label.config(text="Invalid puzzle side length. Enter an integer.")
@@ -138,17 +132,6 @@ image_label.pack(expand=True, fill=tk.BOTH)
 # Label for shuffled output image
 shuffled_image_label = Label(root, text="Shuffled and rotated puzzle pieces will appear here", relief="solid", bd=1, fg=text_color, bg=bg_color)
 shuffled_image_label.pack(expand=True, fill=tk.BOTH)
-
-
-# Label for piece size entry
-piece_size_label = tk.Label(root, text="Enter Piece Size")
-piece_size_label.pack(pady=(20, 0))  # Add some padding above the label
-# Entry for piece size
-piece_size_var = StringVar(value="16x16")
-piece_size_entry = Entry(root, textvariable=piece_size_var)
-piece_size_entry.pack(pady=5)
-piece_size_entry.bind("<Return>", lambda event: update_piece_size())
-
 
 # Label for puzzle side length entry
 puzzle_side_length_label = tk.Label(root, text="Enter Puzzle Side Length:")

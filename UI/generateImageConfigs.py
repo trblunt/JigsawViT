@@ -5,11 +5,6 @@ import numpy as np
 import h5py
 import matplotlib.pyplot as plt
 
-
-#Define configurations
-puzzle_side_length = 14  # 14x14 grid
-piece_size = (16, 16)   # Size of each piece
-
 # Function to shuffle and rotate pieces
 def shuffle_and_rotate_pieces(pieces):
     shuffled_pieces = random.sample(pieces, len(pieces))
